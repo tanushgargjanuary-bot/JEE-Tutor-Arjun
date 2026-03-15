@@ -75,48 +75,65 @@ def process_referral(current_user, entered_code):
     conn.close()
     return "✅ Success! Pro days added to your account."
 
-# --- 3. PREMIUM UI & STYLE INJECTION ---
-st.set_page_config(page_title="Arjun | JEE Mentor", layout="wide")
+# --- 3. THE "GOLDEN WRAPPER" STYLE INJECTION ---
+st.set_page_config(page_title="Arjun | JEE Mentor", layout="wide", initial_sidebar_state="expanded")
 
-# Custom CSS for a "SaaS" look
 st.markdown("""
     <style>
-    /* Main Background */
+    /* Global Styles */
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
+    
+    html, body, [class*="css"]  {
+        font-family: 'Inter', sans-serif;
+    }
+
+    /* Main Background - Deep Slate */
     .stApp {
-        background-color: #0E1117;
+        background: radial-gradient(circle at top right, #1a1c23, #0e1117);
     }
-    
-    /* Clean Sidebar */
+
+    /* Sidebar - Glassmorphism Effect */
     [data-testid="stSidebar"] {
-        background-color: #161B22;
-        border-right: 1px solid #30363D;
+        background-color: rgba(22, 27, 34, 0.95);
+        border-right: 1px solid #30363d;
+        backdrop-filter: blur(10px);
     }
-    
-    /* Make the Upgrade Button POP */
+
+    /* Custom Chat Bubbles */
+    [data-testid="stChatMessage"] {
+        background-color: #1c2128;
+        border: 1px solid #30363d;
+        border-radius: 15px;
+        margin-bottom: 10px;
+        padding: 15px;
+    }
+
+    /* The "Capitalist" Upgrade Button - Pulsing Success Green */
     div.stButton > button:first-child {
-        background-color: #238636; /* Success Green */
+        background: linear-gradient(135deg, #238636 0%, #2ea043 100%);
         color: white;
-        border-radius: 8px;
         border: none;
-        font-weight: bold;
-        transition: 0.3s;
+        padding: 0.6rem 1.2rem;
+        border-radius: 10px;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        box-shadow: 0 4px 15px rgba(35, 134, 54, 0.3);
+        transition: all 0.3s ease;
     }
-    
+
     div.stButton > button:hover {
-        background-color: #2ea043;
-        border: none;
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px rgba(46, 160, 67, 0.5);
         color: white;
     }
-    
-    /* Chat Input Styling */
-    .stChatInputContainer {
-        padding-bottom: 20px;
-    }
+
+    /* Hide Streamlit Header/Footer for a "Standalone App" feel */
+    header {visibility: hidden;}
+    footer {visibility: hidden;}
+    #MainMenu {visibility: hidden;}
     </style>
     """, unsafe_allow_html=True)
-
-if 'username' not in st.session_state:
-    st.session_state.username = "Tanush"
 
 # --- 4. THE FIXED TERMS OF SERVICE MODAL ---
 if not st.session_state.tos_agreed:
