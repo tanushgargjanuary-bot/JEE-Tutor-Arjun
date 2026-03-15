@@ -135,10 +135,23 @@ if prompt := st.chat_input("Ask about Physics, Chemistry, or Math..."):
         with st.chat_message("assistant"):
             sys = f"You are Arjun (AIR 92). Elite JEE mentor. Use STRICT Socratic Scaffolding. Lead with one conceptual question. Memory: {memory_context}. Use LaTeX for math."
             api_msgs = [{"role": "system", "content": sys}] + [{"role": m["role"], "content": m["content"]} for m in st.session_state.messages if m["content"].strip()]
-            try:
-                res = client.chat.completions.create(model="llama-3.3-70b-versatile", messages=api_msgs)
-                ans = res.choices[0].message.content
-                st.markdown(ans)
-                st.session_state.messages.append({"role": "assistant", "content": ans})
-            except Exception as e: st.error(f"Error: {e}")
+            import time
+            max_retries = 3
+            for attempt in range(max_retries):
+                try:
+                    response = client.chat.completions.create(
+                        model="llama-3.3-70b-versatile",
+                        messages=api_messages
+                    )
+                    full_res = response.choices[0].message.content
+                    st.markdown(full_res)
+                    st.session_state.messages.append({"role": "assistant", "content": full_res})
+                    break # Success!
+                except Exception as e:
+                    if "429" in str(e) and attempt < max_retries - 1:
+                        time.sleep(2) # Wait 2 seconds and retry
+                        continue
+                    else:
+                        st.error("Arjun is thinking deeply (Rate Limit). Try again in 10 seconds.")
+                        break
     st.rerun()
