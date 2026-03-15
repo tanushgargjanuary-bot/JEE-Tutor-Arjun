@@ -33,7 +33,6 @@ st.markdown("""
     .stApp { background: radial-gradient(circle at top right, #1e2129, #0e1117); font-family: 'Inter', sans-serif; }
     [data-testid="stChatMessage"] { background-color: #1c2128; border: 1px solid #30363d; border-radius: 12px; margin-bottom: 10px; }
     div.stButton > button:first-child { background: linear-gradient(135deg, #238636 0%, #2ea043 100%); color: white; border-radius: 8px; font-weight: bold; width: 100%; border: none; }
-    .side-box { background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 15px; padding: 20px; margin-bottom: 20px; backdrop-filter: blur(5px); }
     </style>
     """, unsafe_allow_html=True)
 
@@ -99,19 +98,34 @@ with col_dash:
     st.title("🏹 Arjun")
     st.caption("JEE Mentor • AIR 92")
     
-    st.markdown(f'<div class="side-box"><b>Mentor Memo:</b><br><small>{memory_context}</small></div>', unsafe_allow_html=True)
-    
-    st.markdown('<div class="side-box">', unsafe_allow_html=True)
-    if is_pro: st.success("⭐ PRO ACTIVE")
-    else:
-        st.info("⚪ BASIC")
-        if st.button("🚀 Upgrade"): show_pricing()
-    st.markdown('</div>', unsafe_allow_html=True)
-
-    st.markdown('<div class="side-box">', unsafe_allow_html=True)
-    st.write("🎁 **Referral Code**")
-    st.code(generate_ref_code(st.session_state.username), language=None)
-    st.markdown('</div>', unsafe_allow_html=True)
+    # Clean, native Streamlit containers instead of hacky HTML
+    with st.container(border=True):
+        st.markdown("**Mentor Memo:**")
+        st.caption(memory_context)
+        
+    with st.container(border=True):
+        if is_pro: 
+            st.success("⭐ PRO ACTIVE")
+        else:
+            st.info("⚪ BASIC")
+            if st.button("🚀 Upgrade", use_container_width=True): show_pricing()
+            
+    with st.container(border=True):
+        st.write("🎁 **Referral Code**")
+        st.code(generate_ref_code(st.session_state.username), language=None)
+        
+        st.divider() # Adds a nice line between your code and the input
+        
+        ref_input = st.text_input("Friend's Code", placeholder="Enter code...")
+        if st.button("Apply Code", use_container_width=True): 
+            st.toast(process_referral(st.session_state.username, ref_input))
+            
+    with st.expander("⚙️ Admin Console"):
+        if st.text_input("Passcode", type="password") == "FOUNDER_BETA_2026":
+            conn = sqlite3.connect('user_data.db')
+            st.dataframe(pd.read_sql_query("SELECT username, payment_intent FROM users WHERE payment_intent IS NOT NULL", conn))
+            st.dataframe(pd.read_sql_query("SELECT username, pro_expiry, total_referrals FROM users", conn))
+            conn.close()
 
 # --- 7. CHAT & BRAIN ---
 with col_chat:
