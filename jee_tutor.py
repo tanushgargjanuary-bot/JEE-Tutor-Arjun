@@ -48,6 +48,33 @@ def get_user_data():
     return data
 
 def generate_ref_code(username):
+    def process_referral(current_user, entered_code):
+    if entered_code == "FOUNDER_BETA_2026":
+        conn = sqlite3.connect('user_data.db'); c = conn.cursor()
+        c.execute("UPDATE users SET pro_expiry = '2027-01-01' WHERE username = ?", (current_user,))
+        conn.commit(); conn.close()
+        return "👑 Founder's access granted."
+    
+    conn = sqlite3.connect('user_data.db'); c = conn.cursor()
+    c.execute("SELECT username FROM users WHERE referral_code = ?", (entered_code,))
+    referrer = c.fetchone()
+    
+    if not referrer: 
+        return "❌ Code not found."
+    if entered_code == generate_ref_code(current_user): 
+        return "🚫 No self-referrals."
+    
+    c.execute("SELECT * FROM referrals WHERE referee_id = ?", (current_user,))
+    if c.fetchone(): 
+        return "⚠️ You've already used a code."
+    
+    # Give Referrer +3 days, Give Referee +2 days
+    c.execute("UPDATE users SET pro_expiry = DATE(COALESCE(pro_expiry, CURRENT_DATE), '+3 days'), total_referrals = total_referrals + 1 WHERE referral_code = ?", (entered_code,))
+    c.execute("UPDATE users SET pro_expiry = DATE(COALESCE(pro_expiry, CURRENT_DATE), '+2 days') WHERE username = ?", (current_user,))
+    c.execute("INSERT INTO referrals (referrer_id, referee_id) VALUES (?, ?)", (entered_code, current_user))
+    conn.commit(); conn.close()
+    
+    return "✅ Success! Pro days added."
     return hashlib.sha256(username.encode()).hexdigest()[:6].upper()
 
 # --- 4. THE TERMS OF SERVICE FIX ---
