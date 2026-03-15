@@ -115,9 +115,15 @@ with col_dash:
 
 # --- 7. CHAT & BRAIN ---
 with col_chat:
-    st.header("Doubt Resolution")
+    st.header("Ask Arjun")
     if "messages" not in st.session_state:
-        st.session_state.messages = [{"role": "assistant", "content": "I am Arjun. I ranked Top 100 in JEE. What are we mastering today?"}]
+        welcome_text = (
+            "I am Arjun. I ranked in the **Top 100 in JEE**, and I'm here to ensure you do the same. "
+            "I'm not just a calculator; I'm your guide for the next 2 years. "
+            "I won't give you answers—I'll give you the intuition to solve anything they throw at you. "
+            "What concept are we mastering today?"
+        )
+        st.session_state.messages = [{"role": "assistant", "content": welcome_text}]
 
     for m in st.session_state.messages:
         with st.chat_message(m["role"]): st.markdown(m["content"])
@@ -127,7 +133,7 @@ if prompt := st.chat_input("Ask about Physics, Chemistry, or Math..."):
     with col_chat:
         with st.chat_message("user"): st.markdown(prompt)
         with st.chat_message("assistant"):
-            sys = f"You are Arjun (AIR 92). Elite JEE mentor. Use STRICT Socratic Scaffolding. Lead with one conceptual question. Memory: {memory_context}. Use LaTeX."
+            sys = f"You are Arjun (AIR 92). Elite JEE mentor. Use STRICT Socratic Scaffolding. Lead with one conceptual question. Memory: {memory_context}. Use LaTeX for math."
             api_msgs = [{"role": "system", "content": sys}] + [{"role": m["role"], "content": m["content"]} for m in st.session_state.messages if m["content"].strip()]
             try:
                 res = client.chat.completions.create(model="llama-3.3-70b-versatile", messages=api_msgs)
