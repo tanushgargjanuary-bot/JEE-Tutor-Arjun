@@ -5,228 +5,134 @@ import pandas as pd
 from groq import Groq
 from datetime import datetime, date
 
-# --- 1. DATABASE MIGRATOR (The Engine) ---
+# --- 1. DATABASE SETUP ---
 def ensure_database_schema():
     conn = sqlite3.connect('user_data.db', check_same_thread=False)
     c = conn.cursor()
-    # Create users table
     c.execute('''CREATE TABLE IF NOT EXISTS users (username TEXT PRIMARY KEY, password TEXT)''')
-    
-    # Add columns safely if they don't exist
     columns_to_add = [
         ("referral_code", "TEXT"), ("pro_expiry", "DATE"),
         ("total_referrals", "INTEGER DEFAULT 0"), ("tos_agreed", "INTEGER DEFAULT 0"),
         ("payment_intent", "TEXT"), ("user_summary", "TEXT") 
     ]
     for col_name, col_type in columns_to_add:
-        try:
-            c.execute(f"ALTER TABLE users ADD COLUMN {col_name} {col_type}")
+        try: c.execute(f"ALTER TABLE users ADD COLUMN {col_name} {col_type}")
         except sqlite3.OperationalError: pass 
-    
-    # Create referrals tracking table
     c.execute('''CREATE TABLE IF NOT EXISTS referrals 
                  (referrer_id TEXT, referee_id TEXT, timestamp DATETIME, PRIMARY KEY (referrer_id, referee_id))''')
     conn.commit(); conn.close()
 
 ensure_database_schema()
 
-# --- 2. PREMIUM UI (Glassmorphism & Branding) ---
+# --- 2. UI & CSS ---
 st.set_page_config(page_title="Arjun | JEE Mentor", layout="wide", initial_sidebar_state="collapsed")
 
 st.markdown("""
     <style>
-    /* Clean Hide */
     header {visibility: hidden;} footer {visibility: hidden;} #MainMenu {visibility: hidden;}
-    
-    /* Background & Font */
     .stApp { background: radial-gradient(circle at top right, #1e2129, #0e1117); font-family: 'Inter', sans-serif; }
-    
-    /* Chat Bubble Styling */
-    [data-testid="stChatMessage"] { 
-        background-color: #1c2128; 
-        border: 1px solid #30363d; 
-        border-radius: 12px; 
-        margin-bottom: 10px; 
-        padding: 15px;
-    }
-    
-    /* Capitalist Upgrade Button */
-    div.stButton > button:first-child { 
-        background: linear-gradient(135deg, #238636 0%, #2ea043 100%); 
-        color: white; border-radius: 8px; font-weight: bold; width: 100%; border: none; 
-    }
-    
-    /* Dashboard Boxes */
-    .side-box { 
-        background: rgba(255, 255, 255, 0.03); 
-        border: 1px solid rgba(255, 255, 255, 0.1); 
-        border-radius: 15px; 
-        padding: 20px; 
-        margin-bottom: 20px; 
-        backdrop-filter: blur(5px); 
-    }
+    [data-testid="stChatMessage"] { background-color: #1c2128; border: 1px solid #30363d; border-radius: 12px; margin-bottom: 10px; }
+    div.stButton > button:first-child { background: linear-gradient(135deg, #238636 0%, #2ea043 100%); color: white; border-radius: 8px; font-weight: bold; width: 100%; border: none; }
+    .side-box { background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 15px; padding: 20px; margin-bottom: 20px; backdrop-filter: blur(5px); }
     </style>
     """, unsafe_allow_html=True)
 
-# --- 3. HELPER FUNCTIONS ---
+# --- 3. LOGIC & HELPERS ---
 client = Groq(api_key=st.secrets["GROQ_API_KEY"])
+
+if 'username' not in st.session_state: st.session_state.username = "Tanush"
+
+def get_user_data():
+    conn = sqlite3.connect('user_data.db'); c = conn.cursor()
+    c.execute("SELECT tos_agreed, pro_expiry, user_summary FROM users WHERE username = ?", (st.session_state.username,))
+    data = c.fetchone(); conn.close()
+    return data
 
 def generate_ref_code(username):
     return hashlib.sha256(username.encode()).hexdigest()[:6].upper()
 
-def update_user_memory(username, chat_history):
-    if len(chat_history) < 6: return 
-    history_text = "\n".join([f"{m['role']}: {m['content']}" for m in chat_history[-6:]])
-    try:
-        response = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
-            messages=[{"role": "system", "content": "Summarize student's conceptual gaps and progress in under 40 words."}, 
-                      {"role": "user", "content": history_text}]
-        )
-        conn = sqlite3.connect('user_data.db'); c = conn.cursor()
-        c.execute("UPDATE users SET user_summary = ? WHERE username = ?", (response.choices[0].message.content, username))
-        conn.commit(); conn.close()
-    except: pass
+# --- 4. THE TERMS OF SERVICE FIX ---
+user_info = get_user_data()
+# Priority 1: Check Session State, Priority 2: Check Database
+if 'tos_confirmed' not in st.session_state:
+    st.session_state.tos_confirmed = user_info[0] if user_info else 0
 
-def process_referral(current_user, entered_code):
-    if entered_code == "FOUNDER_BETA_2026":
-        conn = sqlite3.connect('user_data.db'); c = conn.cursor()
-        c.execute("UPDATE users SET pro_expiry = '2027-01-01' WHERE username = ?", (current_user,))
-        conn.commit(); conn.close()
-        return "👑 Founder's access granted."
-    
-    conn = sqlite3.connect('user_data.db'); c = conn.cursor()
-    c.execute("SELECT username FROM users WHERE referral_code = ?", (entered_code,))
-    referrer = c.fetchone()
-    if not referrer: return "❌ Code not found."
-    if entered_code == generate_ref_code(current_user): return "🚫 No self-referrals."
-    
-    c.execute("SELECT * FROM referrals WHERE referee_id = ?", (current_user,))
-    if c.fetchone(): return "⚠️ You've already used a code."
-    
-    c.execute("UPDATE users SET pro_expiry = DATE(COALESCE(pro_expiry, CURRENT_DATE), '+3 days'), total_referrals = total_referrals + 1 WHERE referral_code = ?", (entered_code,))
-    c.execute("UPDATE users SET pro_expiry = DATE(COALESCE(pro_expiry, CURRENT_DATE), '+2 days') WHERE username = ?", (current_user,))
-    c.execute("INSERT INTO referrals (referrer_id, referee_id) VALUES (?, ?)", (entered_code, current_user))
-    conn.commit(); conn.close()
-    return "✅ Success! Pro days added."
-
-# --- 4. SESSION & MODALS ---
-if 'username' not in st.session_state: st.session_state.username = "Tanush"
-
-conn = sqlite3.connect('user_data.db'); c = conn.cursor()
-c.execute("SELECT tos_agreed, pro_expiry, user_summary FROM users WHERE username = ?", (st.session_state.username,))
-user_row = c.fetchone(); conn.close()
-
-tos_db = user_row[0] if user_row else 0
-is_pro = bool(user_row and user_row[1] and datetime.strptime(user_row[1], '%Y-%m-%d').date() >= date.today())
-memory_context = user_row[2] if user_row and user_row[2] else "New student. Let's start building your JEE profile."
-
-if not tos_db:
-    @st.dialog("📜 Terms of Service")
-    def show_tos():
-        st.write("By using Arjun, you agree this is an intuition-building tool. Verify critical formulas with textbooks.")
-        if st.button("I Agree", type="primary", use_container_width=True):
+if not st.session_state.tos_confirmed:
+    @st.dialog("📜 Welcome to Arjun")
+    def tos_dialog():
+        st.write("### Founder's Terms")
+        st.write("1. Arjun is an **intuition builder**, not a calculator.")
+        st.write("2. We use Socratic teaching. Don't ask for direct answers.")
+        st.write("3. You agree to verify critical data with official textbooks.")
+        if st.button("I Agree & Start Learning", type="primary", use_container_width=True):
             conn = sqlite3.connect('user_data.db'); c = conn.cursor()
             c.execute("UPDATE users SET tos_agreed = 1 WHERE username = ?", (st.session_state.username,))
             conn.commit(); conn.close()
-            st.rerun()
-    show_tos(); st.stop()
+            st.session_state.tos_confirmed = 1
+            st.rerun() # Force clear the dialog
+    tos_dialog()
+    st.stop()
+
+# --- 5. DASHBOARD DATA ---
+is_pro = bool(user_info and user_info[1] and datetime.strptime(user_info[1], '%Y-%m-%d').date() >= date.today())
+memory_context = user_info[2] if user_info and user_info[2] else "New student. Let's build your AIR profile."
 
 @st.dialog("💎 Upgrade to Pro")
 def show_pricing():
-    st.write("Unlock the full power of Arjun and dominate JEE.")
-    col1, col2 = st.columns(2)
-    with col1:
-        st.subheader("Monthly"); st.title("₹499")
-        if st.button("Get Monthly", use_container_width=True): 
+    st.write("Unlock the full power of Arjun.")
+    c1, c2 = st.columns(2)
+    with c1:
+        if st.button("Monthly - ₹499"): 
             conn = sqlite3.connect('user_data.db'); c = conn.cursor()
             c.execute("UPDATE users SET payment_intent = 'Monthly' WHERE username = ?", (st.session_state.username,))
-            conn.commit(); conn.close(); st.toast("Notified team!")
-    with col2:
-        st.subheader("Yearly"); st.title("₹3,999")
-        if st.button("Get Yearly", type="primary", use_container_width=True): 
+            conn.commit(); conn.close(); st.toast("Team notified!")
+    with c2:
+        if st.button("Yearly - ₹3,999", type="primary"):
             conn = sqlite3.connect('user_data.db'); c = conn.cursor()
             c.execute("UPDATE users SET payment_intent = 'Yearly' WHERE username = ?", (st.session_state.username,))
-            conn.commit(); conn.close(); st.toast("Notified team!")
+            conn.commit(); conn.close(); st.toast("Team notified!")
 
-# --- 5. MAIN DASHBOARD LAYOUT ---
+# --- 6. LAYOUT ---
 col_dash, col_chat = st.columns([1, 2.5], gap="large")
 
 with col_dash:
     st.title("🏹 Arjun")
     st.caption("JEE Mentor • AIR 92")
     
-    st.markdown('<div class="side-box">', unsafe_allow_html=True)
-    st.subheader("Mentor Memo"); st.caption(memory_context)
-    st.markdown('</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="side-box"><b>Mentor Memo:</b><br><small>{memory_context}</small></div>', unsafe_allow_html=True)
     
     st.markdown('<div class="side-box">', unsafe_allow_html=True)
     if is_pro: st.success("⭐ PRO ACTIVE")
     else:
         st.info("⚪ BASIC")
-        if st.button("🚀 Upgrade to Pro"): show_pricing()
+        if st.button("🚀 Upgrade"): show_pricing()
     st.markdown('</div>', unsafe_allow_html=True)
 
     st.markdown('<div class="side-box">', unsafe_allow_html=True)
-    st.write("🎁 **Refer & Earn**")
+    st.write("🎁 **Referral Code**")
     st.code(generate_ref_code(st.session_state.username), language=None)
-    ref_input = st.text_input("Friend's Code", placeholder="Enter code...")
-    if st.button("Apply Code"): st.toast(process_referral(st.session_state.username, ref_input))
     st.markdown('</div>', unsafe_allow_html=True)
 
-    with st.expander("⚙️ Admin Console"):
-        if st.text_input("Passcode", type="password") == "FOUNDER_BETA_2026":
-            conn = sqlite3.connect('user_data.db')
-            st.write("Payment Intents")
-            st.dataframe(pd.read_sql_query("SELECT username, payment_intent FROM users WHERE payment_intent IS NOT NULL", conn))
-            st.write("Users Status")
-            st.dataframe(pd.read_sql_query("SELECT username, pro_expiry, total_referrals FROM users", conn))
-            conn.close()
-
-# --- 6. CHAT INTERFACE ---
+# --- 7. CHAT & BRAIN ---
 with col_chat:
-    st.header("Ask Arjun")
-    
+    st.header("Doubt Resolution")
     if "messages" not in st.session_state:
-        welcome_text = "I am Arjun. I ranked in the **Top 100 in JEE**. I'm here to build your intuition, not just solve your homework. What are we mastering today?"
-        st.session_state.messages = [{"role": "assistant", "content": welcome_text}]
+        st.session_state.messages = [{"role": "assistant", "content": "I am Arjun. I ranked Top 100 in JEE. What are we mastering today?"}]
 
-    # Display existing chat history
-    for message in st.session_state.messages:
-        with st.chat_message(message["role"]):
-            st.markdown(message["content"])
+    for m in st.session_state.messages:
+        with st.chat_message(m["role"]): st.markdown(m["content"])
 
-# --- 7. STICKY INPUT (THE FINAL FIX) ---
-# chat_input must be outside the column for the sticky-at-bottom effect
-if prompt := st.chat_input("E.g., How do I find the center of mass of a semi-circle?"):
+if prompt := st.chat_input("Ask about Physics, Chemistry, or Math..."):
     st.session_state.messages.append({"role": "user", "content": prompt})
-    
     with col_chat:
-        with st.chat_message("user"):
-            st.markdown(prompt)
-
+        with st.chat_message("user"): st.markdown(prompt)
         with st.chat_message("assistant"):
-            sys_msg = f"You are Arjun (AIR 92). Elite JEE mentor. Use STRICT Socratic Scaffolding. NEVER give the final answer immediately. Lead with conceptual questions. Memory: {memory_context}. Use LaTeX."
-            
-            # Clean empty messages to prevent API errors
-            api_messages = [{"role": "system", "content": sys_msg}]
-            for m in st.session_state.messages:
-                if m["content"].strip():
-                    api_messages.append({"role": m["role"], "content": m["content"]})
-
+            sys = f"You are Arjun (AIR 92). Elite JEE mentor. Use STRICT Socratic Scaffolding. Lead with one conceptual question. Memory: {memory_context}. Use LaTeX."
+            api_msgs = [{"role": "system", "content": sys}] + [{"role": m["role"], "content": m["content"]} for m in st.session_state.messages if m["content"].strip()]
             try:
-                response = client.chat.completions.create(
-                    model="llama-3.3-70b-versatile",
-                    messages=api_messages
-                )
-                full_res = response.choices[0].message.content
-                st.markdown(full_res)
-                st.session_state.messages.append({"role": "assistant", "content": full_res})
-                
-                # Update memory every 6 messages
-                if len(st.session_state.messages) % 6 == 0:
-                    update_user_memory(st.session_state.username, st.session_state.messages)
-            except Exception as e:
-                st.error(f"Brain Overloaded. Details: {e}")
-    
+                res = client.chat.completions.create(model="llama-3.3-70b-versatile", messages=api_msgs)
+                ans = res.choices[0].message.content
+                st.markdown(ans)
+                st.session_state.messages.append({"role": "assistant", "content": ans})
+            except Exception as e: st.error(f"Error: {e}")
     st.rerun()
