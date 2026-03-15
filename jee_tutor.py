@@ -169,7 +169,7 @@ with col_chat:
         with st.chat_message("user"): st.markdown(prompt)
 
         with st.chat_message("assistant"):
-            sys_msg = f"You are Arjun (AIR 92). Elite JEE mentor. Use Socratic Scaffolding. Memory: {memory_context}. Use LaTeX for math."
+            sys_msg = f"You are Arjun (AIR 92). Elite JEE mentor. Use STRICT Socratic Scaffolding. NEVER give the final answer or full derivation immediately. Your goal is to lead the student to the realization by asking one conceptual leading question at a time. Memory: {memory_context}. Use LaTeX."
             api_messages = [{"role": "system", "content": sys_msg}]
             for m in st.session_state.messages:
                 if m["content"].strip(): api_messages.append({"role": m["role"], "content": m["content"]})
