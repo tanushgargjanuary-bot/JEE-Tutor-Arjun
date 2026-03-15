@@ -121,7 +121,7 @@ def show_pricing():
         st.subheader("Yearly"); st.title("₹3,999")
         if st.button("Get Yearly", type="primary", use_container_width=True): track_payment_intent(st.session_state.username, "Yearly")
 
-# --- 6. DASHBOARD & ADMIN ---
+# --- 6. LAYOUT SPLIT ---
 col_dash, col_chat = st.columns([1, 2.5], gap="large")
 
 with col_dash:
@@ -142,7 +142,7 @@ with col_dash:
     st.markdown('<div class="side-box">', unsafe_allow_html=True)
     st.write("🎁 **Refer & Earn**")
     st.code(generate_ref_code(st.session_state.username), language=None)
-    ref_input = st.text_input("Friend's Code", placeholder="Enter code...")
+    ref_input = st.text_input("Friend's Code", placeholder="Enter code...", key="ref_in")
     if st.button("Apply Code"): st.toast(process_referral(st.session_state.username, ref_input))
     st.markdown('</div>', unsafe_allow_html=True)
 
@@ -152,6 +152,55 @@ with col_dash:
             st.dataframe(pd.read_sql_query("SELECT username, payment_intent FROM users WHERE payment_intent IS NOT NULL", conn))
             st.dataframe(pd.read_sql_query("SELECT username, pro_expiry, total_referrals FROM users", conn))
             conn.close()
+
+# --- 7. CHAT INTERFACE (FIXED TO BOTTOM) ---
+with col_chat:
+    st.header("Ask Arjun")
+    
+    # Message Container
+    if "messages" not in st.session_state:
+        welcome_text = "I am Arjun. I ranked in the **Top 100 in JEE**. I'm here to build your intuition, not just solve your homework. What are we mastering today?"
+        st.session_state.messages = [{"role": "assistant", "content": welcome_text}]
+
+    # This loop now stays inside the column
+    for message in st.session_state.messages:
+        with st.chat_message(message["role"]):
+            st.markdown(message["content"])
+
+# THIS IS THE FIX: Move chat_input OUTSIDE of the 'with col_chat' block
+# Streamlit will automatically pin it to the bottom of the screen.
+if prompt := st.chat_input("E.g., How do I find the center of mass of a semi-circle?"):
+    st.session_state.messages.append({"role": "user", "content": prompt})
+    
+    # We trigger a rerun to show the user message immediately
+    with col_chat:
+        with st.chat_message("user"):
+            st.markdown(prompt)
+
+        with st.chat_message("assistant"):
+            sys_msg = f"You are Arjun (AIR 92). Elite JEE mentor. Use STRICT Socratic Scaffolding. NEVER give the final answer immediately. Lead with conceptual questions. Memory: {memory_context}. Use LaTeX."
+            api_messages = [{"role": "system", "content": sys_msg}]
+            for m in st.session_state.messages:
+                if m["content"].strip():
+                    api_messages.append({"role": m["role"], "content": m["content"]})
+
+            try:
+                response = client.chat.completions.create(
+                    model="llama-3.3-70b-versatile",
+                    messages=api_messages
+                )
+                full_res = response.choices[0].message.content
+                st.markdown(full_res)
+                st.session_state.messages.append({"role": "assistant", "content": full_res})
+                
+                # Update memory every 6 messages
+                if len(st.session_state.messages) % 6 == 0:
+                    update_user_memory(st.session_state.username, st.session_state.messages)
+                    
+            except Exception as e:
+                st.error(f"Brain Overloaded. Details: {e}")
+    
+    st.rerun() # Refresh to keep everything in sync
 
 # --- 7. CLEAN CHAT INTERFACE ---
 with col_chat:
