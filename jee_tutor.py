@@ -5,7 +5,7 @@ import streamlit.components.v1 as components
 
 # 1. INITIALIZATION (Security: Use st.secrets or rotate your key)
 # Note: Replace this with your new, private key
-client = Groq(api_key="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")
+client = Groq(api_key=st.secrets["GROQ_API_KEY"])
 
 # 2. MASTER QUALITY PROMPTS (High-Depth + Identity)
 STRICT_GUARDRAIL = """
