@@ -44,10 +44,10 @@ def track_payment_intent(username, plan):
     c.execute("UPDATE users SET payment_intent = ? WHERE username = ?", (plan, username))
     conn.commit()
     conn.close()
-    st.toast(f"🚀 Garg.ai team notified! We'll contact you for the {plan} setup.")
+    st.toast(f"🚀 Team notified! We'll contact you for the {plan} setup.")
 
 def process_referral(current_user, entered_code):
-    if entered_code == "GARG_AI_BETA_2026":
+    if entered_code == "FOUNDER_BETA_2026":
         conn = sqlite3.connect('user_data.db')
         c = conn.cursor()
         c.execute("UPDATE users SET pro_expiry = '2027-01-01' WHERE username = ?", (current_user,))
@@ -79,29 +79,43 @@ def process_referral(current_user, entered_code):
 st.set_page_config(page_title="Ask Arjun | JEE Mentor", layout="wide")
 
 if 'username' not in st.session_state:
-    st.session_state.username = "Tanush" # Replace with your actual auth logic later
+    st.session_state.username = "Tanush"
 
 # Check DB for User Status
 conn = sqlite3.connect('user_data.db'); c = conn.cursor()
 c.execute("SELECT tos_agreed, pro_expiry FROM users WHERE username = ?", (st.session_state.username,))
 user_row = c.fetchone(); conn.close()
 
+# Lock ToS into session state immediately to prevent infinite loops
+if 'tos_agreed' not in st.session_state:
+    st.session_state.tos_agreed = user_row[0] if user_row else 0
+
 is_pro = False
 if user_row and user_row[1] and datetime.strptime(user_row[1], '%Y-%m-%d').date() >= date.today():
     is_pro = True
 
-# ToS Modal
-if not (user_row[0] if user_row else 0):
-    @st.dialog("📜 Welcome to Ask Arjun")
+# --- 4. THE FIXED TERMS OF SERVICE MODAL ---
+if not st.session_state.tos_agreed:
+    @st.dialog("📜 Terms of Service")
     def show_tos():
-        st.write("Before we start, please agree to our terms of educational use. Arjun is an AI mentor designed to build your intuition. Always verify critical formulas with your textbook.")
+        st.write("""
+        **Welcome to Arjun.** By using this JEE Mentor, you agree to:
+        1. **Educational Use Only:** Arjun is an AI assistant designed to build intuition. Always cross-reference critical formulas with official JEE textbooks.
+        2. **Fair Play:** You will not attempt to exploit the referral system.
+        3. **Data Privacy:** We use your interaction data to improve the Socratic logic. Your personal details are never sold.
+        4. **Limitation of Liability:** We are not responsible for exam results. We provide the tools; you provide the hard work.
+        """)
         if st.button("I Agree & Accept", type="primary", use_container_width=True):
             conn = sqlite3.connect('user_data.db'); c = conn.cursor()
             c.execute("UPDATE users SET tos_agreed = 1 WHERE username = ?", (st.session_state.username,))
-            conn.commit(); conn.close(); st.rerun()
-    show_tos(); st.stop()
+            conn.commit(); conn.close()
+            st.session_state.tos_agreed = 1  # Updates state to break the loop
+            st.rerun()
+    
+    show_tos()
+    st.stop()
 
-# Pricing Modal
+# --- 5. PRICING MODAL ---
 @st.dialog("💎 Upgrade to Pro")
 def show_pricing():
     st.write("Unlock the full power of Arjun and dominate JEE 2026.")
@@ -119,15 +133,15 @@ def show_pricing():
         if st.button("Get Yearly", type="primary", use_container_width=True):
             track_payment_intent(st.session_state.username, "Yearly")
 
-# --- 4. POLISHED SIDEBAR ---
+# --- 6. POLISHED SIDEBAR ---
 with st.sidebar:
     st.title("🏹 Arjun")
-    st.caption("Powered by Garg.ai | 24/7 Doubt Resolution")
+    st.caption("24/7 JEE Doubt Resolution")
     
-    # FOUNDER'S ADMIN CONSOLE (Hidden)
+    # FOUNDER'S ADMIN CONSOLE
     with st.expander("⚙️ Admin Console"):
         admin_pass = st.text_input("Passcode", type="password")
-        if admin_pass == "GARG_AI_BETA_2026":
+        if admin_pass == "FOUNDER_BETA_2026":
             st.success("Admin Access Granted")
             conn = sqlite3.connect('user_data.db')
             df_leads = pd.read_sql_query("SELECT username, payment_intent FROM users WHERE payment_intent IS NOT NULL", conn)
@@ -164,11 +178,10 @@ with st.sidebar:
     if st.button("Apply Code", use_container_width=True):
         st.toast(process_referral(st.session_state.username, ref_input))
 
-# --- 5. CLEAN CHAT INTERFACE ---
+# --- 7. CLEAN CHAT INTERFACE ---
 st.header("Ask Arjun")
 st.caption("Paste your doubt in Physics, Chemistry, or Math. Let's break it down.")
 
-# Welcome Message Logic
 if "messages" not in st.session_state:
     st.session_state.messages = [
         {"role": "assistant", "content": "Hey! I'm Arjun. Drop a physics, chemistry, or math doubt below and let's figure it out together. (No direct answers, I'm here to help you actually learn it)."}
