@@ -75,24 +75,48 @@ def process_referral(current_user, entered_code):
     conn.close()
     return "✅ Success! Pro days added to your account."
 
-# --- 3. UI SETUP & SESSION ---
-st.set_page_config(page_title="Ask Arjun | JEE Mentor", layout="wide")
+# --- 3. PREMIUM UI & STYLE INJECTION ---
+st.set_page_config(page_title="Arjun | JEE Mentor", layout="wide")
+
+# Custom CSS for a "SaaS" look
+st.markdown("""
+    <style>
+    /* Main Background */
+    .stApp {
+        background-color: #0E1117;
+    }
+    
+    /* Clean Sidebar */
+    [data-testid="stSidebar"] {
+        background-color: #161B22;
+        border-right: 1px solid #30363D;
+    }
+    
+    /* Make the Upgrade Button POP */
+    div.stButton > button:first-child {
+        background-color: #238636; /* Success Green */
+        color: white;
+        border-radius: 8px;
+        border: none;
+        font-weight: bold;
+        transition: 0.3s;
+    }
+    
+    div.stButton > button:hover {
+        background-color: #2ea043;
+        border: none;
+        color: white;
+    }
+    
+    /* Chat Input Styling */
+    .stChatInputContainer {
+        padding-bottom: 20px;
+    }
+    </style>
+    """, unsafe_allow_html=True)
 
 if 'username' not in st.session_state:
     st.session_state.username = "Tanush"
-
-# Check DB for User Status
-conn = sqlite3.connect('user_data.db'); c = conn.cursor()
-c.execute("SELECT tos_agreed, pro_expiry FROM users WHERE username = ?", (st.session_state.username,))
-user_row = c.fetchone(); conn.close()
-
-# Lock ToS into session state immediately to prevent infinite loops
-if 'tos_agreed' not in st.session_state:
-    st.session_state.tos_agreed = user_row[0] if user_row else 0
-
-is_pro = False
-if user_row and user_row[1] and datetime.strptime(user_row[1], '%Y-%m-%d').date() >= date.today():
-    is_pro = True
 
 # --- 4. THE FIXED TERMS OF SERVICE MODAL ---
 if not st.session_state.tos_agreed:
