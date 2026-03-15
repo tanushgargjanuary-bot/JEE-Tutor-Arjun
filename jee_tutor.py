@@ -16,7 +16,7 @@ def ensure_database_schema():
         ("pro_expiry", "DATE"),
         ("total_referrals", "INTEGER DEFAULT 0"),
         ("tos_agreed", "INTEGER DEFAULT 0"),
-        ("payment_intent", "TEXT") # Stores "Monthly" or "Yearly"
+        ("payment_intent", "TEXT") 
     ]
     for col_name, col_type in columns_to_add:
         try:
@@ -46,11 +46,40 @@ def track_payment_intent(username, plan):
     conn.close()
     st.toast(f"🚀 Garg.ai team notified! We'll contact you for the {plan} setup.")
 
-# --- 3. UI & DIALOGS ---
-st.set_page_config(page_title="Arjun - JEE Vertical Reasoning", layout="wide")
+def process_referral(current_user, entered_code):
+    if entered_code == "GARG_AI_BETA_2026":
+        conn = sqlite3.connect('user_data.db')
+        c = conn.cursor()
+        c.execute("UPDATE users SET pro_expiry = '2027-01-01' WHERE username = ?", (current_user,))
+        conn.commit(); conn.close()
+        return "👑 Founder's access granted."
+
+    conn = sqlite3.connect('user_data.db')
+    c = conn.cursor()
+    c.execute("SELECT username, total_referrals FROM users WHERE referral_code = ?", (entered_code,))
+    referrer = c.fetchone()
+    
+    if not referrer: return "❌ Code not found."
+    if entered_code == generate_ref_code(current_user): return "🚫 Nice try. No self-referrals."
+
+    c.execute("SELECT * FROM referrals WHERE referee_id = ?", (current_user,))
+    if c.fetchone(): return "⚠️ You've already used a referral code."
+
+    if referrer[1] >= 10: return "📈 This mentor has reached their referral limit."
+
+    c.execute("UPDATE users SET pro_expiry = DATE(COALESCE(pro_expiry, CURRENT_DATE), '+3 days'), total_referrals = total_referrals + 1 WHERE referral_code = ?", (entered_code,))
+    c.execute("UPDATE users SET pro_expiry = DATE(COALESCE(pro_expiry, CURRENT_DATE), '+2 days') WHERE username = ?", (current_user,))
+    c.execute("INSERT INTO referrals (referrer_id, referee_id, timestamp) VALUES (?, ?, CURRENT_TIMESTAMP)", (entered_code, current_user))
+    
+    conn.commit()
+    conn.close()
+    return "✅ Success! Pro days added to your account."
+
+# --- 3. UI SETUP & SESSION ---
+st.set_page_config(page_title="Ask Arjun | JEE Mentor", layout="wide")
 
 if 'username' not in st.session_state:
-    st.session_state.username = "Tanush"
+    st.session_state.username = "Tanush" # Replace with your actual auth logic later
 
 # Check DB for User Status
 conn = sqlite3.connect('user_data.db'); c = conn.cursor()
@@ -63,24 +92,24 @@ if user_row and user_row[1] and datetime.strptime(user_row[1], '%Y-%m-%d').date(
 
 # ToS Modal
 if not (user_row[0] if user_row else 0):
-    @st.dialog("📜 Garg.ai Terms of Service")
+    @st.dialog("📜 Welcome to Ask Arjun")
     def show_tos():
-        st.write("Welcome to Garg.ai. Do you agree to our terms of educational use and data privacy?")
-        if st.button("I Agree"):
+        st.write("Before we start, please agree to our terms of educational use. Arjun is an AI mentor designed to build your intuition. Always verify critical formulas with your textbook.")
+        if st.button("I Agree & Accept", type="primary", use_container_width=True):
             conn = sqlite3.connect('user_data.db'); c = conn.cursor()
             c.execute("UPDATE users SET tos_agreed = 1 WHERE username = ?", (st.session_state.username,))
             conn.commit(); conn.close(); st.rerun()
     show_tos(); st.stop()
 
 # Pricing Modal
-@st.dialog("💎 Upgrade to Garg.ai Pro")
+@st.dialog("💎 Upgrade to Pro")
 def show_pricing():
-    st.write("Unlock the full power of Vertical Reasoning and dominate JEE 2026.")
+    st.write("Unlock the full power of Arjun and dominate JEE 2026.")
     col1, col2 = st.columns(2)
     with col1:
         st.subheader("Monthly")
         st.title("₹499")
-        st.write("- Unlimited Visual Reasoning\n- Priority Socratic Support")
+        st.write("- Unlimited Visual Socratic Help\n- Priority Sourcing")
         if st.button("Get Monthly", use_container_width=True):
             track_payment_intent(st.session_state.username, "Monthly")
     with col2:
@@ -90,7 +119,7 @@ def show_pricing():
         if st.button("Get Yearly", type="primary", use_container_width=True):
             track_payment_intent(st.session_state.username, "Yearly")
 
-# --- 4. SIDEBAR & ADMIN VIEW ---
+# --- 4. POLISHED SIDEBAR ---
 with st.sidebar:
     st.title("🏹 Arjun")
     st.caption("Powered by Garg.ai | 24/7 Doubt Resolution")
@@ -112,7 +141,7 @@ with st.sidebar:
 
     st.divider()
 
-    # POLISHED ACCOUNT STATUS UI
+    # ACCOUNT STATUS
     st.subheader("Your Plan")
     if is_pro:
         st.markdown(f"**Tier:** 🟢 PRO")
@@ -125,21 +154,44 @@ with st.sidebar:
 
     st.divider()
     
-    # CLEANED UP REFERRAL UI
+    # REFERRAL ENGINE
     st.write("### 🎁 Earn Free Pro")
     my_code = generate_ref_code(st.session_state.username)
-    st.caption(f"Share this code to get 3 free days of Pro.")
-    st.code(my_code, language=None) # Makes it easy to copy
+    st.caption("Share this code to get 3 free days of Pro.")
+    st.code(my_code, language=None) 
     
     ref_input = st.text_input("Friend's Code", placeholder="Enter code here...")
     if st.button("Apply Code", use_container_width=True):
-        st.toast("Verifying with Garg.ai...") # Replace with your process_referral call
+        st.toast(process_referral(st.session_state.username, ref_input))
 
-# --- 5. CHAT INTERFACE ---
+# --- 5. CLEAN CHAT INTERFACE ---
 st.header("Ask Arjun")
 st.caption("Paste your doubt in Physics, Chemistry, or Math. Let's break it down.")
 
+# Welcome Message Logic
 if "messages" not in st.session_state:
-    st.session_state.messages = []
+    st.session_state.messages = [
+        {"role": "assistant", "content": "Hey! I'm Arjun. Drop a physics, chemistry, or math doubt below and let's figure it out together. (No direct answers, I'm here to help you actually learn it)."}
+    ]
 
-# (The rest of your chat loop stays exactly the same)
+for message in st.session_state.messages:
+    with st.chat_message(message["role"]):
+        st.markdown(message["content"])
+
+if prompt := st.chat_input("E.g., How do I find the center of mass of a semi-circle?"):
+    st.session_state.messages.append({"role": "user", "content": prompt})
+    with st.chat_message("user"):
+        st.markdown(prompt)
+
+    with st.chat_message("assistant"):
+        sys_prompt = "You are Arjun (AIR 347). You are a blunt but highly effective JEE mentor. Use Socratic Scaffolding. Never give direct answers. Give a hint, explain a concept, and ask a follow up question to build the user's intuition. Use LaTeX for math."
+        
+        response = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[{"role": "system", "content": sys_prompt}] + 
+                     [{"role": m["role"], "content": m["content"]} for m in st.session_state.messages]
+        )
+        full_response = response.choices[0].message.content
+        st.markdown(full_response)
+        
+    st.session_state.messages.append({"role": "assistant", "content": full_response})
