@@ -33,7 +33,19 @@ def ensure_database_schema():
     db_execute('''CREATE TABLE IF NOT EXISTS feedback 
                  (username TEXT, timestamp DATETIME, feedback_text TEXT)''')
 
+def migrate_referral_codes():
+    """One-time migration: populate referral_code for any user that doesn't have one yet."""
+    users_missing_code = db_execute(
+        "SELECT username FROM users WHERE referral_code IS NULL OR referral_code = ''",
+        fetchall=True
+    )
+    if users_missing_code:
+        for (uname,) in users_missing_code:
+            code = hashlib.sha256(uname.encode()).hexdigest()[:6].upper()
+            db_execute("UPDATE users SET referral_code = ? WHERE username = ?", (code, uname))
+
 ensure_database_schema()
+migrate_referral_codes()
 
 # --- 2. UI & CSS ---
 st.set_page_config(page_title="Arjun | JEE Mentor", layout="wide", initial_sidebar_state="collapsed")
@@ -78,6 +90,9 @@ def generate_ref_code(username):
     return hashlib.sha256(username.encode()).hexdigest()[:6].upper()
 
 def process_referral(current_user, entered_code):
+    entered_code = entered_code.strip().upper()  # Sanitize input
+    if not entered_code:
+        return "⚠️ Please enter a referral code."
     if entered_code == "FOUNDER_BETA_2026":
         db_execute("UPDATE users SET pro_expiry = '2027-01-01' WHERE username = ?", (current_user,))
         return "👑 Founder's access granted."
@@ -193,9 +208,12 @@ with col_dash:
             
             st.divider()
             
-            ref_input = st.text_input("Friend's Code", placeholder="Enter code...")
+            ref_input = st.text_input("Friend's Code", placeholder="Enter code...", key="ref_input")
             if st.button("Apply Code", use_container_width=True): 
-                st.toast(process_referral(st.session_state.username, ref_input))
+                result = process_referral(st.session_state.username, ref_input)
+                st.toast(result)
+                if "✅" in result:
+                    st.rerun()  # Refresh Pro status immediately
             
     with st.expander("⚙️ Admin Console"):
         if st.text_input("Passcode", type="password") == "FOUNDER_BETA_2026":
