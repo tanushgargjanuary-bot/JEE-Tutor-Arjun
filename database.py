@@ -5,13 +5,14 @@ Handles all SQLite database operations including user authentication,
 feedback management, referral system, and query logging.
 """
 
-import hashlib
+import bcrypt
 import sqlite3
 from datetime import datetime
 
 import secrets as secrets_lib
 
 DB_PATH = "user_data.db"
+BCRYPT_ROUNDS = 12
 
 
 def get_db_connection():
@@ -74,13 +75,28 @@ def init_database():
     except sqlite3.OperationalError:
         pass
 
+    # Add indexes for query performance
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_users_referral ON users(referral_code)")
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)")
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_query_log_user ON query_log(user_id, timestamp)")
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_feedback_user ON feedback(user_id, submitted_at)")
+
     conn.commit()
     conn.close()
 
 
 def hash_password(password):
-    """Hash a password using SHA-256 for secure storage."""
-    return hashlib.sha256(password.encode()).hexdigest()
+    """Hash password using bcrypt with salt."""
+    return bcrypt.hashpw(password.encode(), bcrypt.gensalt(rounds=BCRYPT_ROUNDS)).decode()
+
+
+def verify_password(password, password_hash):
+    """Verify password against bcrypt hash."""
+    return bcrypt.checkpw(password.encode(), password_hash.encode())
 
 
 def generate_referral_code():
@@ -147,16 +163,11 @@ def authenticate_user(username, password):
     conn = get_db_connection()
     cursor = conn.cursor()
 
-    password_hash = hash_password(password)
-    cursor.execute("""
-        SELECT * FROM users
-        WHERE username = ? AND password_hash = ?
-    """, (username, password_hash))
-
+    cursor.execute("SELECT * FROM users WHERE username = ?", (username,))
     user = cursor.fetchone()
     conn.close()
 
-    if user:
+    if user and verify_password(password, user['password_hash']):
         conn = get_db_connection()
         cursor = conn.cursor()
         cursor.execute("""
