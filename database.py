@@ -158,6 +158,40 @@ def create_user(username, password, email=None, referral_code_input=None):
         return False, str(e)
 
 
+def get_or_create_google_user(email, name, google_id):
+    """Get existing user or create new one from Google OAuth."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    # Check if user exists by email
+    cursor.execute("SELECT * FROM users WHERE email = ?", (email,))
+    user = cursor.fetchone()
+
+    if user:
+        # Update last_active and return existing user
+        cursor.execute(
+            "UPDATE users SET last_active = CURRENT_TIMESTAMP WHERE id = ?", (user['id'],))
+        conn.commit()
+        conn.close()
+        return dict(user)
+
+    # Create new user
+    referral_code = generate_referral_code()
+    cursor.execute("""
+        INSERT INTO users (username, email, referral_code, created_at)
+        VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+    """, (name.split()[0] if name else email.split('@')[0], email, referral_code))
+
+    user_id = cursor.lastrowid
+    conn.commit()
+
+    cursor.execute("SELECT * FROM users WHERE id = ?", (user_id,))
+    user = cursor.fetchone()
+    conn.close()
+
+    return dict(user) if user else None
+
+
 def authenticate_user(username, password):
     """Authenticate a user with username and password."""
     conn = get_db_connection()

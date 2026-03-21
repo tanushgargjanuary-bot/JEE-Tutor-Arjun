@@ -3,5 +3,6 @@ groq
 pandas
 requests
 bcrypt
-requests
 fpdf
+google-auth
+streamlit-oauth

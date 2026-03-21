@@ -10,9 +10,10 @@ from groq import Groq
 from database import (
     init_database, create_user, authenticate_user, get_user_by_id,
     has_submitted_feedback, submit_feedback, is_pro_user,
-    apply_referral_code, get_db_connection,
+    apply_referral_code, get_db_connection, get_or_create_google_user,
 )
 from prompts import PROMPTS
+from google_auth import verify_google_token, get_google_client_id
 
 ADMIN_PASSCODE = "FOUNDER_BETA_2026"
 
@@ -312,6 +313,59 @@ with st.sidebar:
 
     else:
         auth_mode = st.radio("Account", ["Login", "Sign Up"])
+
+        # Google OAuth Login (shown for both Login and Sign Up)
+        st.divider()
+        st.caption("Or continue with")
+
+        client_id = get_google_client_id()
+        if client_id:
+            from streamlit_oauth import OAuth2Component
+            oauth2 = OAuth2Component()
+
+            if st.button("🔐 Sign in with Google", use_container_width=True):
+                try:
+                    result = oauth2.authorize_button(
+                        name="Continue with Google",
+                        client_id=client_id,
+                        endpoint="https://accounts.google.com/o/oauth2/v2/auth",
+                        token_endpoint="https://oauth2.googleapis.com/token",
+                        redirect_uri="postmessage",
+                        scope="openid email profile",
+                        icon="data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Cpath fill='%23FFC107' d='M43.611 20.083H42V20H24v8h11.303c-1.649 4.657-6.08 8-11.303 8c-6.627 0-12-5.373-12-12c0-6.627 5.373-12 12-12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4C12.955 4 4 12.955 4 24c0 11.045 8.955 20 20 20c11.045 0 20-8.955 20-20c0-1.341-.138-2.65-.389-3.917z'/%3E%3Cpath fill='%23FF3D00' d='m6.306 14.691l6.571 4.819C14.655 15.108 18.961 12 24 12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4 16.318 4 9.656 8.337 6.306 14.691z'/%3E%3Cpath fill='%234CAF50' d='M24 44c5.166 0 9.86-1.977 13.409-5.192l-6.19-5.238A11.91 11.91 0 0 1 24 36c-5.018 0-9.292-3.119-11.069-7.386l-6.533 5.042C9.906 41.59 16.433 44 24 44z'/%3E%3Cpath fill='%231976D2' d='M43.611 20.083H42V20H24v8h11.303a12.04 12.04 0 0 1-4.087 5.571l.003-.002 6.19 5.238C36.971 39.205 44 34 44 24c0-1.341-.138-2.65-.389-3.917z'/%3E%3C/svg%3E",
+                        use_container_width=True
+                    )
+
+                    if result and 'token' in result:
+                        token = result['token']
+                        user_info = verify_google_token(
+                            token.get('id_token', ''))
+
+                        if user_info:
+                            user = get_or_create_google_user(
+                                user_info['email'],
+                                user_info['name'],
+                                user_info['google_id']
+                            )
+
+                            if user:
+                                st.session_state.logged_in = True
+                                st.session_state.user_data = user
+                                st.session_state.feedback_submitted = has_submitted_feedback(
+                                    user['id'])
+                                st.success(f"Welcome, {user['username']}!")
+                                st.rerun()
+                            else:
+                                st.error("Failed to create user account")
+                        else:
+                            st.error("Invalid Google token")
+                except Exception as e:
+                    st.error(f"Google login failed: {str(e)}")
+        else:
+            st.info("🔧 Google login not configured. Add credentials to secrets.toml")
+
+        st.divider()
+
         if auth_mode == "Login":
             st.subheader("🔐 Login")
             if st.button("Login", use_container_width=True):
