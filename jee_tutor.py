@@ -400,18 +400,24 @@ with st.sidebar:
 
         if auth_mode == "Login":
             st.subheader("🔐 Login")
+            login_username = st.text_input("Username", key="login_user")
+            login_password = st.text_input(
+                "Password", type="password", key="login_pass")
+
             if st.button("Login", use_container_width=True):
-                user = authenticate_user(st.text_input("Username", key="login_user"), st.text_input(
-                    "Password", type="password", key="login_pass"))
-                if user:
-                    st.session_state.logged_in = True
-                    st.session_state.user_data = user
-                    st.session_state.feedback_submitted = has_submitted_feedback(
-                        user['id'])
-                    st.success("Login successful!")
-                    st.rerun()
+                if login_username and login_password:
+                    user = authenticate_user(login_username, login_password)
+                    if user:
+                        st.session_state.logged_in = True
+                        st.session_state.user_data = user
+                        st.session_state.feedback_submitted = has_submitted_feedback(
+                            user['id'])
+                        st.success("Login successful!")
+                        st.rerun()
+                    else:
+                        st.error("Invalid credentials")
                 else:
-                    st.error("Invalid credentials")
+                    st.warning("Please enter username and password")
         else:
             st.subheader("📝 Create Account")
             new_username = st.text_input("Username", key="signup_user")
