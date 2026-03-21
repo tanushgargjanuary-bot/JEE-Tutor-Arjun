@@ -429,7 +429,10 @@ with st.sidebar:
                 else:
                     success, message = create_user(
                         new_username, new_password, None, referral_input)
-                    st.success(message) if success else st.error(message)
+                    if success:
+                        st.success(message)
+                    else:
+                        st.error(message)
 
 st.divider()
 
