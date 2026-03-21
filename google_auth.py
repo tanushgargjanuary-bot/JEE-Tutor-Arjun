@@ -1,5 +1,6 @@
 """
 Google OAuth Authentication for Arjun
+Uses streamlit-google-auth for popup-style account selector
 
 Setup Instructions:
 1. Go to https://console.cloud.google.com/
@@ -18,8 +19,6 @@ redirect_uri = "https://your-app.streamlit.app"
 
 import os
 import streamlit as st
-from google.oauth2 import id_token
-from google.auth.transport import requests as google_requests
 
 
 def get_google_client_id():
@@ -43,35 +42,4 @@ def get_redirect_uri():
     try:
         return st.secrets["google"]["redirect_uri"]
     except (KeyError, FileNotFoundError, AttributeError):
-        return os.getenv("GOOGLE_REDIRECT_URI", "http://localhost:8501")
-
-
-def verify_google_token(token):
-    """
-    Verify Google OAuth token and extract user info.
-
-    Args:
-        token (str): ID token from Google OAuth
-
-    Returns:
-        dict or None: User info with email, name, picture if valid
-    """
-    try:
-        client_id = get_google_client_id()
-        if not client_id:
-            return None
-
-        idinfo = id_token.verify_oauth2_token(
-            token,
-            google_requests.Request(),
-            client_id
-        )
-
-        return {
-            "email": idinfo.get("email"),
-            "name": idinfo.get("name"),
-            "picture": idinfo.get("picture"),
-            "google_id": idinfo.get("sub")
-        }
-    except Exception:
-        return None
+        return os.getenv("GOOGLE_REDIRECT_URI", "https://jee-tutor-arjun.streamlit.app")

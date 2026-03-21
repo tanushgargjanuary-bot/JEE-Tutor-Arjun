@@ -4,5 +4,4 @@ pandas
 requests
 bcrypt
 fpdf
-google-auth
-streamlit-oauth
+streamlit-google-auth
