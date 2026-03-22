@@ -14,6 +14,7 @@ from database import (
 )
 from prompts import PROMPTS
 from google_auth import get_google_client_id, get_google_client_secret, get_redirect_uri
+from mermaid_renderer import extract_and_render_mermaid, extract_csv_coordinates, remove_csv_blocks
 
 ADMIN_PASSCODE = "FOUNDER_BETA_2026"
 
@@ -456,7 +457,20 @@ if st.session_state.logged_in:
 
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
-            st.markdown(message["content"])
+            content = message["content"]
+
+            # Render Mermaid diagrams
+            content = extract_and_render_mermaid(content)
+
+            # Extract and render CSV coordinates as graph
+            coords = extract_csv_coordinates(content)
+            if coords:
+                import pandas as pd
+                df = pd.DataFrame(coords, columns=['x', 'y'])
+                st.line_chart(df.set_index('x'))
+                content = remove_csv_blocks(content)
+
+            st.markdown(content)
 
     if prompt := st.chat_input("Ask a JEE Physics, Chemistry, or Math question..."):
         with st.chat_message("user"):
@@ -472,6 +486,17 @@ if st.session_state.logged_in:
                         "role": "user", "content": prompt}]
                 )
                 response = completion.choices[0].message.content
+
+                # Render Mermaid diagrams
+                response = extract_and_render_mermaid(response)
+
+                # Extract and render CSV coordinates as graph
+                coords = extract_csv_coordinates(response)
+                if coords:
+                    df = pd.DataFrame(coords, columns=['x', 'y'])
+                    st.line_chart(df.set_index('x'))
+                    response = remove_csv_blocks(response)
+
                 st.markdown(response)
 
         st.session_state.messages.append(
