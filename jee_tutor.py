@@ -12,7 +12,7 @@ from database import (
     has_submitted_feedback, submit_feedback, is_pro_user,
     apply_referral_code, get_db_connection, get_or_create_google_user,
 )
-from prompts import PROMPTS
+from prompts import PROMPTS, DIRECT_MODE, SOCRATIC_MODE
 from google_auth import get_google_client_id, get_google_client_secret, get_redirect_uri
 from mermaid_renderer import extract_and_render_mermaid, extract_csv_coordinates, remove_csv_blocks
 
@@ -487,12 +487,19 @@ st.divider()
 
 if st.session_state.logged_in:
     st.header("📚 JEE Vertical Reasoning Engine")
-    st.caption("Socratic Scaffolding • Trap Detection • NCERT Grounding")
+    st.caption("Choose your learning mode for each question")
 
     if not is_pro_user(st.session_state.user_data):
         st.warning(
             "⚡ BASIC Plan: Complete problems daily to unlock PRO features. Submit feedback to unlock referrals!")
 
+    # Initialize mode selection state
+    if 'pending_prompt' not in st.session_state:
+        st.session_state.pending_prompt = None
+    if 'mode_selected' not in st.session_state:
+        st.session_state.mode_selected = None
+
+    # Display chat history
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
             content = message["content"]
@@ -503,24 +510,64 @@ if st.session_state.logged_in:
             # Extract and render CSV coordinates as graph
             coords = extract_csv_coordinates(content)
             if coords:
-                import pandas as pd
                 df = pd.DataFrame(coords, columns=['x', 'y'])
                 st.line_chart(df.set_index('x'))
                 content = remove_csv_blocks(content)
 
             st.markdown(content)
 
+    # Mode selection UI (appears after user enters prompt)
+    if st.session_state.pending_prompt:
+        st.divider()
+        st.info("🎯 Choose your learning mode:")
+        col1, col2 = st.columns(2)
+
+        with col1:
+            if st.button("🚀 Quick Solve", use_container_width=True, help="Get step-by-step solution with final answer"):
+                st.session_state.mode_selected = "direct"
+                st.rerun()
+
+        with col2:
+            if st.button("🧠 Socratic Guide", use_container_width=True, help="Build intuition with guided questions"):
+                st.session_state.mode_selected = "socratic"
+                st.rerun()
+
+        if st.button("❌ Cancel", use_container_width=True):
+            st.session_state.pending_prompt = None
+            st.session_state.mode_selected = None
+            st.rerun()
+        st.divider()
+
+    # Chat input
     if prompt := st.chat_input("Ask a JEE Physics, Chemistry, or Math question..."):
+        # Store prompt and wait for mode selection
+        st.session_state.pending_prompt = prompt
+        st.session_state.mode_selected = None
+        st.rerun()
+
+    # Process prompt if mode is selected
+    if st.session_state.pending_prompt and st.session_state.mode_selected:
+        prompt = st.session_state.pending_prompt
+        mode = st.session_state.mode_selected
+
         with st.chat_message("user"):
             st.markdown(prompt)
-        st.session_state.messages.append({"role": "user", "content": prompt})
+        if {"role": "user", "content": prompt} not in st.session_state.messages:
+            st.session_state.messages.append(
+                {"role": "user", "content": prompt})
 
         with st.chat_message("assistant"):
             with st.spinner("🔬 Analyzing via Multi-Agent Chain..."):
                 subject = route_subject(prompt)
+
+                # Get subject-specific prompt with mode branching
+                subject_prompts = PROMPTS.get(subject, PROMPTS["GENERAL"])
+                system_prompt = subject_prompts.get(
+                    mode, subject_prompts["socratic"])
+
                 completion = client.chat.completions.create(
                     model="llama-3.3-70b-versatile", temperature=0.2,
-                    messages=[{"role": "system", "content": PROMPTS.get(subject, PROMPTS["GENERAL"])}, {
+                    messages=[{"role": "system", "content": system_prompt}, {
                         "role": "user", "content": prompt}]
                 )
                 response = completion.choices[0].message.content
@@ -540,12 +587,17 @@ if st.session_state.logged_in:
         st.session_state.messages.append(
             {"role": "assistant", "content": response})
 
+        # Log to database
         conn = get_db_connection()
         cursor = conn.cursor()
         cursor.execute("INSERT INTO query_log (user_id, subject, query_text, response_text, is_socratic, audit_notes) VALUES (?, ?, ?, ?, ?, ?)",
-                       (st.session_state.user_data['id'], subject, prompt, response, True, "Audit skipped for latency"))
+                       (st.session_state.user_data['id'], subject, prompt, response, mode == "socratic", f"Mode: {mode}"))
         conn.commit()
         conn.close()
+
+        # Reset mode state
+        st.session_state.pending_prompt = None
+        st.session_state.mode_selected = None
 
 else:
     st.header("🏹 Welcome to Arjun")
