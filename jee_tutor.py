@@ -35,12 +35,50 @@ client = Groq(api_key=get_groq_api_key())
 
 
 def route_subject(user_query):
-    """Classify a user query into subject category."""
+    """Classify a user query into subject category (aggressive detection)."""
     query_lower = user_query.strip().lower()
+
+    # Greetings & short talk → GENERAL
     if query_lower in ["hi", "hello", "hey", "who are you", "what is this"] or len(query_lower) < 4:
         return "GENERAL"
+
+    # Admin/strategy keywords → GENERAL
     if any(t in query_lower for t in ["syllabus", "date", "weightage", "tips", "strategy", "prep", "how to"]):
         return "GENERAL"
+
+    # Aggressive PHYSICS detection (keyword-based, before AI classification)
+    physics_keywords = [
+        "block", "incline", "friction", "mass", "force", "velocity", "acceleration",
+        "newton", "momentum", "energy", "work", "power", "gravity", "tension",
+        "pulley", "spring", "oscillation", "wave", "lens", "mirror", "refraction",
+        "electric", "magnetic", "field", "circuit", "current", "voltage", "resistance",
+        "capacitor", "inductor", "emf", "flux", "potential", "kinetic", "thermo",
+        "entropy", "pressure", "density", "buoyancy", "torque", "angular", "rotation"
+    ]
+    if any(kw in query_lower for kw in physics_keywords):
+        return "PHYSICS"
+
+    # Aggressive CHEMISTRY detection
+    chemistry_keywords = [
+        "reaction", "compound", "molecule", "bond", "electron", "orbital", "acid",
+        "base", "ph", "oxidation", "reduction", "redox", "catalyst", "equilibrium",
+        "organic", "inorganic", "polymer", "isomer", "benzene", "functional group",
+        "stoichiometry", "mole", "concentration", "titration", "precipitate", "ion"
+    ]
+    if any(kw in query_lower for kw in chemistry_keywords):
+        return "CHEMISTRY"
+
+    # Aggressive MATHEMATICS detection
+    math_keywords = [
+        "function", "derivative", "integral", "limit", "continuity", "differential",
+        "equation", "algebra", "calculus", "matrix", "determinant", "vector",
+        "probability", "statistics", "trigonometry", "sin", "cos", "tan", "log",
+        "sequence", "series", "progression", "permutation", "combination", "set theory"
+    ]
+    if any(kw in query_lower for kw in math_keywords):
+        return "MATHEMATICS"
+
+    # Fallback to AI classification for ambiguous queries
     try:
         classification = client.chat.completions.create(
             model="llama-3.3-70b-versatile", temperature=0.0,
