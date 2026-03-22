@@ -12,7 +12,7 @@ from database import (
     has_submitted_feedback, submit_feedback, is_pro_user,
     apply_referral_code, get_db_connection, get_or_create_google_user,
 )
-from prompts import PROMPTS, DIRECT_MODE, SOCRATIC_MODE
+from prompts import PROMPTS
 from google_auth import get_google_client_id, get_google_client_secret, get_redirect_uri
 from mermaid_renderer import extract_and_render_mermaid, extract_csv_coordinates, remove_csv_blocks
 
@@ -96,10 +96,21 @@ st.set_page_config(page_title="Arjun - JEE Vertical Reasoner",
                    layout="wide", page_icon="🏹")
 init_database()
 
-for key in ['logged_in', 'user_data', 'feedback_submitted', 'show_admin', 'messages']:
-    if key not in st.session_state:
-        st.session_state[key] = False if key == 'logged_in' else (
-            [] if key == 'messages' else None)
+# Initialize session state
+if 'logged_in' not in st.session_state:
+    st.session_state.logged_in = False
+if 'user_data' not in st.session_state:
+    st.session_state.user_data = None
+if 'feedback_submitted' not in st.session_state:
+    st.session_state.feedback_submitted = False
+if 'show_admin' not in st.session_state:
+    st.session_state.show_admin = False
+if 'messages' not in st.session_state:
+    st.session_state.messages = []
+if 'pending_prompt' not in st.session_state:
+    st.session_state.pending_prompt = None
+if 'mode_selected' not in st.session_state:
+    st.session_state.mode_selected = None
 
 
 def show_feedback_page():
@@ -353,7 +364,7 @@ with st.sidebar:
     else:
         auth_mode = st.radio("Account", ["Login", "Sign Up"])
 
-        # Google OAuth Login with popup account selector
+        # Google OAuth
         st.divider()
         st.caption("Or continue with")
 
@@ -366,7 +377,6 @@ with st.sidebar:
             from google.auth.transport import requests as google_requests
             import requests as http_requests
 
-            # Build Google OAuth URL
             google_auth_url = (
                 f"https://accounts.google.com/o/oauth2/v2/auth?"
                 f"client_id={client_id}&"
@@ -377,19 +387,16 @@ with st.sidebar:
                 f"prompt=select_account"
             )
 
-            # Show Google button with popup
             if st.button("🔐 Sign in with Google", use_container_width=True):
                 st.info(
                     f"👉 [**Click here to sign in with Google**]({google_auth_url})")
                 st.caption("A Google popup will appear. Select your account.")
 
-                # Check for auth code in URL params (after redirect)
                 query_params = st.query_params
                 auth_code = query_params.get("code")
 
                 if auth_code:
                     try:
-                        # Exchange code for tokens
                         token_response = http_requests.post(
                             "https://oauth2.googleapis.com/token",
                             data={
@@ -404,14 +411,12 @@ with st.sidebar:
                         token_data = token_response.json()
 
                         if "id_token" in token_data:
-                            # Verify and decode token
                             id_info = id_token.verify_oauth2_token(
                                 token_data["id_token"],
                                 google_requests.Request(),
                                 client_id
                             )
 
-                            # Get or create user
                             user = get_or_create_google_user(
                                 id_info.get("email"),
                                 id_info.get("name"),
@@ -482,7 +487,7 @@ with st.sidebar:
 st.divider()
 
 # ============================================================================
-# MAIN CONTENT AREA (Conversational Chat Interface)
+# MAIN CONTENT AREA (Conversational Chat Interface with Mode Selection)
 # ============================================================================
 
 if st.session_state.logged_in:
@@ -493,74 +498,52 @@ if st.session_state.logged_in:
         st.warning(
             "⚡ BASIC Plan: Complete problems daily to unlock PRO features. Submit feedback to unlock referrals!")
 
-    # Initialize mode selection state
-    if 'pending_prompt' not in st.session_state:
-        st.session_state.pending_prompt = None
-    if 'mode_selected' not in st.session_state:
-        st.session_state.mode_selected = None
-
     # Display chat history
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
             content = message["content"]
-
-            # Render Mermaid diagrams
             content = extract_and_render_mermaid(content)
-
-            # Extract and render CSV coordinates as graph
             coords = extract_csv_coordinates(content)
             if coords:
                 df = pd.DataFrame(coords, columns=['x', 'y'])
                 st.line_chart(df.set_index('x'))
                 content = remove_csv_blocks(content)
-
             st.markdown(content)
 
-    # Mode selection UI (appears after user enters prompt)
-    if st.session_state.pending_prompt:
+    # Mode selection UI
+    if st.session_state.pending_prompt and not st.session_state.mode_selected:
         st.divider()
         st.info("🎯 Choose your learning mode:")
         col1, col2 = st.columns(2)
 
         with col1:
-            if st.button("🚀 Quick Solve", use_container_width=True, help="Get step-by-step solution with final answer"):
+            if st.button("🚀 Quick Solve", use_container_width=True, key="quick_solve_btn"):
                 st.session_state.mode_selected = "direct"
                 st.rerun()
 
         with col2:
-            if st.button("🧠 Socratic Guide", use_container_width=True, help="Build intuition with guided questions"):
+            if st.button("🧠 Socratic Guide", use_container_width=True, key="socratic_btn"):
                 st.session_state.mode_selected = "socratic"
                 st.rerun()
 
-        if st.button("❌ Cancel", use_container_width=True):
+        if st.button("❌ Cancel", use_container_width=True, key="cancel_btn"):
             st.session_state.pending_prompt = None
-            st.session_state.mode_selected = None
             st.rerun()
-        st.divider()
+        st.stop()
 
-    # Chat input
-    if prompt := st.chat_input("Ask a JEE Physics, Chemistry, or Math question..."):
-        # Store prompt and wait for mode selection
-        st.session_state.pending_prompt = prompt
-        st.session_state.mode_selected = None
-        st.rerun()
-
-    # Process prompt if mode is selected
+    # Process if mode selected
     if st.session_state.pending_prompt and st.session_state.mode_selected:
         prompt = st.session_state.pending_prompt
         mode = st.session_state.mode_selected
 
+        # Show user message
         with st.chat_message("user"):
             st.markdown(prompt)
-        if {"role": "user", "content": prompt} not in st.session_state.messages:
-            st.session_state.messages.append(
-                {"role": "user", "content": prompt})
 
+        # Show assistant response
         with st.chat_message("assistant"):
-            with st.spinner("🔬 Analyzing via Multi-Agent Chain..."):
+            with st.spinner("🔬 Analyzing..."):
                 subject = route_subject(prompt)
-
-                # Get subject-specific prompt with mode branching
                 subject_prompts = PROMPTS.get(subject, PROMPTS["GENERAL"])
                 system_prompt = subject_prompts.get(
                     mode, subject_prompts["socratic"])
@@ -572,32 +555,40 @@ if st.session_state.logged_in:
                 )
                 response = completion.choices[0].message.content
 
-                # Render Mermaid diagrams
+                # Render and display
                 response = extract_and_render_mermaid(response)
-
-                # Extract and render CSV coordinates as graph
                 coords = extract_csv_coordinates(response)
                 if coords:
                     df = pd.DataFrame(coords, columns=['x', 'y'])
                     st.line_chart(df.set_index('x'))
                     response = remove_csv_blocks(response)
-
                 st.markdown(response)
 
+        # Save to history and DB
+        st.session_state.messages.append({"role": "user", "content": prompt})
         st.session_state.messages.append(
             {"role": "assistant", "content": response})
 
-        # Log to database
         conn = get_db_connection()
         cursor = conn.cursor()
-        cursor.execute("INSERT INTO query_log (user_id, subject, query_text, response_text, is_socratic, audit_notes) VALUES (?, ?, ?, ?, ?, ?)",
-                       (st.session_state.user_data['id'], subject, prompt, response, mode == "socratic", f"Mode: {mode}"))
+        cursor.execute(
+            "INSERT INTO query_log (user_id, subject, query_text, response_text, is_socratic, audit_notes) VALUES (?, ?, ?, ?, ?, ?)",
+            (st.session_state.user_data['id'], subject, prompt,
+             response, mode == "socratic", f"Mode: {mode}")
+        )
         conn.commit()
         conn.close()
 
-        # Reset mode state
+        # Reset state
         st.session_state.pending_prompt = None
         st.session_state.mode_selected = None
+        st.rerun()
+
+    # Chat input - only shows when no pending prompt
+    if not st.session_state.pending_prompt:
+        if prompt := st.chat_input("Ask a JEE Physics, Chemistry, or Math question..."):
+            st.session_state.pending_prompt = prompt
+            st.rerun()
 
 else:
     st.header("🏹 Welcome to Arjun")
