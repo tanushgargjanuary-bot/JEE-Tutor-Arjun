@@ -553,7 +553,8 @@ if st.session_state.logged_in:
                     messages=[{"role": "system", "content": system_prompt}, {
                         "role": "user", "content": prompt}]
                 )
-                response = completion.choices[0].message.content
+                original_response = completion.choices[0].message.content
+                response = original_response
 
                 # Render and display
                 response = extract_and_render_mermaid(response)
@@ -567,14 +568,14 @@ if st.session_state.logged_in:
         # Save to history and DB
         st.session_state.messages.append({"role": "user", "content": prompt})
         st.session_state.messages.append(
-            {"role": "assistant", "content": response})
+            {"role": "assistant", "content": original_response})
 
         conn = get_db_connection()
         cursor = conn.cursor()
         cursor.execute(
             "INSERT INTO query_log (user_id, subject, query_text, response_text, is_socratic, audit_notes) VALUES (?, ?, ?, ?, ?, ?)",
             (st.session_state.user_data['id'], subject, prompt,
-             response, mode == "socratic", f"Mode: {mode}")
+             original_response, mode == "socratic", f"Mode: {mode}")
         )
         conn.commit()
         conn.close()
