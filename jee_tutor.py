@@ -548,10 +548,19 @@ if st.session_state.logged_in:
                 system_prompt = subject_prompts.get(
                     mode, subject_prompts["socratic"])
 
+                # Build context-aware message history
+                api_messages = [{"role": "system", "content": system_prompt}]
+                
+                # Append past conversation history (avoiding system prompts limits if any, but Groq handles it well)
+                for msg in st.session_state.messages:
+                    api_messages.append({"role": msg["role"], "content": msg["content"]})
+                    
+                # Append the current prompt
+                api_messages.append({"role": "user", "content": prompt})
+
                 completion = client.chat.completions.create(
                     model="llama-3.3-70b-versatile", temperature=0.2,
-                    messages=[{"role": "system", "content": system_prompt}, {
-                        "role": "user", "content": prompt}]
+                    messages=api_messages
                 )
                 original_response = completion.choices[0].message.content
                 response = original_response
