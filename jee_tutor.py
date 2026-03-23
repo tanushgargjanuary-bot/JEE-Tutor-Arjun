@@ -46,6 +46,17 @@ def route_subject(user_query):
     if any(t in query_lower for t in ["syllabus", "date", "weightage", "tips", "strategy", "prep", "how to"]):
         return "GENERAL"
 
+    # ── PRIORITY: Explicit subject word mentioned by user ─────────────────
+    # e.g. "physics FBD", "a chemistry question", "math graph"
+    # These always win before any keyword or AI check.
+    if any(w in query_lower for w in ["physics", "fbd", "free body", "mechanics", "optics", "thermodynamics", "electrostatics"]):
+        return "PHYSICS"
+    if any(w in query_lower for w in ["chemistry", "organic", "inorganic", "reaction", "compound", "molecule"]):
+        return "CHEMISTRY"
+    if any(w in query_lower for w in ["math", "maths", "mathematics", "calculus", "algebra", "trigonometry", "integral", "derivative"]):
+        return "MATHEMATICS"
+    # ─────────────────────────────────────────────────────────────────────
+
     # Aggressive PHYSICS detection (keyword-based, before AI classification)
     physics_keywords = [
         "block", "incline", "friction", "mass", "force", "velocity", "acceleration",
