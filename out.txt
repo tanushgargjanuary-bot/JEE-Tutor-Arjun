@@ -1,0 +1,35 @@
+﻿git : remote: error: 
+GH007: Your push would 
+publish a private email 
+address.        
+At line:1 char:1
++ git push 2>&1 | 
+Out-File -Encoding utf8 
+out.txt
++ ~~~~~~~~~~~~~
+    + CategoryInfo        
+      : NotSpecified: (r  
+  emote: error: ...ddre   
+ ss.        :String) [    
+], RemoteException
+    + FullyQualifiedError 
+   Id : NativeCommandErr  
+  or
+ 
+remote: You can make your 
+email public or disable 
+this protection by 
+visiting:        
+remote: https://github.com
+/settings/emails        
+To https://github.com/tanu
+shgargjanuary-bot/JEE-Tuto
+r-Arjun
+ ! [remote rejected] main 
+-> main (push declined 
+due to email privacy 
+restrictions)
+error: failed to push 
+some refs to 'https://gith
+ub.com/tanushgargjanuary-b
+ot/JEE-Tutor-Arjun'

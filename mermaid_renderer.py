@@ -10,6 +10,8 @@ import streamlit as st
 MERMAID_CDN = "https://cdn.jsdelivr.net/npm/mermaid@10.6.1/dist/mermaid.min.js"
 
 
+import hashlib
+
 def render_mermaid(diagram_code: str, key: str = "0") -> None:
     """
     Render a Mermaid.js diagram using HTML component.
@@ -21,41 +23,40 @@ def render_mermaid(diagram_code: str, key: str = "0") -> None:
     # Clean the diagram code
     diagram_code = diagram_code.strip()
 
-    # Create unique container ID
-    container_id = f"mermaid_{key}_{id(diagram_code)}"
+    # Create a stable, unique container ID using MD5 hash so Streamlit doesn't recreate the iframe
+    hash_str = hashlib.md5(diagram_code.encode('utf-8')).hexdigest()[:8]
+    container_id = f"mermaid_{key}_{hash_str}"
+    
+    # Use Mermaid v9.4.3 - very stable for standard script tags
+    MERMAID_JS = "https://cdn.jsdelivr.net/npm/mermaid@9.4.3/dist/mermaid.min.js"
 
     html = f"""
-    <div id="{container_id}" class="mermaid" style="text-align: center; background: #fafafa; padding: 20px; border-radius: 8px; border: 1px solid #eee;">
-    {diagram_code}
+    <div id="{container_id}_parent" style="text-align: center; background: #ffffff; padding: 15px; border-radius: 10px; border: 1px solid #ddd; box-shadow: 0 2px 4px rgba(0,0,0,0.05); overflow: auto;">
+        <div id="{container_id}">
+        {diagram_code}
+        </div>
     </div>
-    <script src="{MERMAID_CDN}"></script>
+    
+    <script src="{MERMAID_JS}"></script>
     <script>
         (function() {{
-            const container = document.getElementById('{container_id}');
-            if (!container) return;
-            
-            // Check if mermaid is loaded
-            if (typeof mermaid === 'undefined') {{
-                console.log('Mermaid not loaded yet');
-                return;
+            try {{
+                mermaid.initialize({{ 
+                    startOnLoad: false, 
+                    theme: 'default',
+                    securityLevel: 'loose'
+                }});
+                
+                // Explicitly render the specific container
+                mermaid.init(undefined, document.getElementById('{container_id}'));
+            }} catch (e) {{
+                document.getElementById('{container_id}_parent').innerHTML = 
+                    '<div style="color: red; padding: 10px; text-align: left;"><b>Mermaid Error:</b><br><pre>' + e.message + '</pre></div>';
             }}
-            
-            // Initialize and render
-            mermaid.initialize({{ 
-                startOnLoad: false, 
-                theme: 'default',
-                securityLevel: 'loose',
-            }});
-            
-            // Force re-render
-            container.removeAttribute('data-processed');
-            mermaid.run({{
-                nodes: [container]
-            }});
         }})();
     </script>
     """
-    st.components.v1.html(html, height=400)
+    st.components.v1.html(html, height=500, scrolling=True)
 
 
 def extract_and_render_mermaid(text: str) -> str:
