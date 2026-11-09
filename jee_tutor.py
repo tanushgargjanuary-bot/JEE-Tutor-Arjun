@@ -16,7 +16,18 @@ from prompts import PROMPTS
 from google_auth import get_google_client_id, get_google_client_secret, get_redirect_uri
 from mermaid_renderer import extract_and_render_mermaid, extract_csv_coordinates, remove_csv_blocks
 
-ADMIN_PASSCODE = "FOUNDER_BETA_2026"
+def get_admin_passcode():
+    """Load the admin passcode from Streamlit secrets or the environment."""
+    try:
+        value = st.secrets["ADMIN_PASSCODE"]
+        if value:
+            return str(value)
+    except (FileNotFoundError, KeyError, AttributeError):
+        pass
+    return os.getenv("ADMIN_PASSCODE")
+
+
+ADMIN_PASSCODE = get_admin_passcode()
 
 
 def get_groq_api_key():
@@ -342,9 +353,12 @@ with st.sidebar:
             st.session_state.feedback_submitted = False
             st.rerun()
 
-        if st.text_input("Admin Access", type="password", key="admin_input") == ADMIN_PASSCODE:
-            st.session_state.show_admin = True
-            st.rerun()
+        if ADMIN_PASSCODE:
+            if st.text_input("Admin Access", type="password", key="admin_input") == ADMIN_PASSCODE:
+                st.session_state.show_admin = True
+                st.rerun()
+        else:
+            st.caption("Admin access is disabled. Configure ADMIN_PASSCODE in Streamlit secrets or the environment.")
 
         if st.session_state.show_admin:
             st.divider()
