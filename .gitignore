@@ -47,10 +47,12 @@ user_data.db
 # Logs
 *.log
 
-# Secrets (keep API keys out of repo)
-.secrets
+# Secrets and local configuration
 .env
-streamlit/secrets.toml
+.env.*
+!.env.example
+.secrets
+.streamlit/secrets.toml
 secrets.toml
 
 # Templates (safe to commit)
